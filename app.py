@@ -62,9 +62,9 @@ def criar_base_ficticia():
   for i in range(1, 26):
     dias_offset_inicio = -(i * 15)
     if i % 5 == 0:
-      termino = hoje - timedelta(days=i)  # Vencido
+      termino = hoje - timedelta(days=i * 5)  # Vencido
     elif i % 4 == 0:
-      termino = hoje + timedelta(days=5)  # Próximo do vencimento
+      termino = hoje + timedelta(days=10)  # Próximo do vencimento
     elif i == 3:
       termino = hoje  # Vence hoje
     else:
@@ -87,9 +87,9 @@ def criar_base_ficticia():
         "responsavel": f"Responsável {i}",
         "valor_estimado": float(15000 + (i * 4500)),
         "data_inicio": (hoje + timedelta(days=dias_offset_inicio)).strftime(
-            "%d/%m/%Y"
+            "%Y-%m-%d"
         ),
-        "data_termino": termino.strftime("%d/%m/%Y"),
+        "data_termino": termino.strftime("%Y-%m-%d"),
         "risco_compliance": riscos[i % len(riscos)],
         "situacao_manual": "Normal",
     })
@@ -105,9 +105,9 @@ def carregar_dados():
       df.to_csv(CSV_PATH, index=False)
     else:
       df = pd.read_csv(CSV_PATH)
-      # Garante formato de data correto ao ler
-      df["data_inicio"] = df["data_inicio"].astype(str)
-      df["data_termino"] = df["data_termino"].astype(str)
+      # Limpa e garante que as colunas essenciais existam
+      if "numero_contrato" not in df.columns and "id_contrato" in df.columns:
+        df = df.rename(columns={"id_contrato": "numero_contrato"})
     return df
   except Exception as e:
     st.error(f"Erro ao carregar os dados: {e}")
@@ -124,8 +124,13 @@ def calcular_status_linha(row):
   if str(row.get("situacao_manual", "Normal")).lower() == "encerrado":
     return "Encerrado"
 
+  data_term_str = str(row["data_termino"]).strip()
   try:
-    data_term = datetime.strptime(str(row["data_termino"]), "%d/%m/%Y").date()
+    # Tenta ler formato ISO (YYYY-MM-DD) ou brasileiro (DD/MM/YYYY)
+    if "-" in data_term_str:
+      data_term = datetime.strptime(data_term_str[:10], "%Y-%m-%d").date()
+    else:
+      data_term = datetime.strptime(data_term_str[:10], "%d/%m/%Y").date()
   except ValueError:
     return "Erro Data"
 
@@ -144,10 +149,26 @@ def calcular_status_linha(row):
 
 def calcular_dias_restantes(data_termino_str):
   try:
-    data_term = datetime.strptime(str(data_termino_str), "%d/%m/%Y").date()
+    data_term_str = str(data_termino_str).strip()
+    if "-" in data_term_str:
+      data_term = datetime.strptime(data_term_str[:10], "%Y-%m-%d").date()
+    else:
+      data_term = datetime.strptime(data_term_str[:10], "%d/%m/%Y").date()
     return (data_term - date.today()).days
   except ValueError:
     return 0
+
+
+def formatar_data_br(data_str):
+  try:
+    data_str = str(data_str).strip()
+    if "-" in data_str:
+      dt = datetime.strptime(data_str[:10], "%Y-%m-%d")
+    else:
+      dt = datetime.strptime(data_str[:10], "%d/%m/%Y")
+    return dt.strftime("%d/%m/%Y")
+  except:
+    return data_str
 
 
 def formatar_moeda(valor):
@@ -169,36 +190,25 @@ def validar_cnpj(cnpj):
   return len(cnpj_limpo) == 14
 
 
-# Estilização de Cores da Tabela (Vigência e Risco)
-def colorir_tabela(row):
-  estilos = [""] * len(row)
+# Estilização de Cores (Caixa inteira para Situação e Texto para Risco)
+def estilizar_celulas(val):
+  if val == "Vigente":
+    return "background-color: #d4edda; color: #155724; font-weight: bold;"
+  elif val in ["Próximo do vencimento", "Vence hoje"]:
+    return "background-color: #fff3cd; color: #856404; font-weight: bold;"
+  elif val == "Vencido":
+    return "background-color: #f8d7da; color: #721c24; font-weight: bold;"
+  elif val == "Encerrado":
+    return "background-color: #e2e3e5; color: #383d41; font-weight: bold;"
 
-  # Cor por Situação de Vigência
-  sit = str(row.get("Situação", ""))
-  if sit == "Vigente":
-    cor_sit = "background-color: #d4edda; color: #155724;"  # Verde suave
-  elif sit in ["Próximo do vencimento", "Vence hoje"]:
-    cor_sit = "background-color: #fff3cd; color: #856404;"  # Amarelo suave
-  elif sit == "Vencido":
-    cor_sit = "background-color: #f8d7da; color: #721c24;"  # Vermelho suave
-  else:
-    cor_sit = ""
+  if val == "Baixo":
+    return "color: #28a745; font-weight: bold;"
+  elif val == "Médio":
+    return "color: #d39e00; font-weight: bold;"
+  elif val == "Alto":
+    return "color: #dc3545; font-weight: bold;"
 
-  # Cor por Risco de Compliance
-  risco = str(row.get("Risco Compliance", ""))
-  if risco == "Baixo":
-    cor_risco = "color: #28a745; font-weight: bold;"
-  elif risco == "Médio":
-    cor_risco = "color: #ffc107; font-weight: bold;"
-  elif risco == "Alto":
-    cor_risco = "color: #dc3545; font-weight: bold;"
-  else:
-    cor_risco = ""
-
-  return [
-      cor_sit if col == "Situação" else (cor_risco if col == "Risco Compliance" else "")
-      for col in row.index
-  ]
+  return ""
 
 
 # --- INTERFACE (SIDEBAR E NAVEGAÇÃO) ---
@@ -278,7 +288,6 @@ elif menu == "Cadastro de Contratos":
     col1, col2 = st.columns(2)
 
     with col1:
-      # Sugestão de ID automático no formato EC 026/2027
       proximo_num = f"EC {len(df_contratos) + 1:03d}/2027"
       numero_contrato = st.text_input(
           "Número do Contrato (ID) *", value=proximo_num
@@ -348,8 +357,8 @@ elif menu == "Cadastro de Contratos":
             "centro_custo": centro_custo,
             "responsavel": responsavel,
             "valor_estimado": valor_estimado,
-            "data_inicio": data_inicio.strftime("%d/%m/%Y"),
-            "data_termino": data_termino.strftime("%d/%m/%Y"),
+            "data_inicio": data_inicio.strftime("%Y-%m-%d"),
+            "data_termino": data_termino.strftime("%Y-%m-%d"),
             "risco_compliance": risco_compliance,
             "situacao_manual": "Normal",
         }
@@ -364,10 +373,7 @@ elif menu == "Cadastro de Contratos":
             ignore_index=True,
         )
         salvar_dados(df_novo)
-        st.success(
-            "Contrato cadastrado com sucesso! Atualize a página para"
-            " visualizar."
-        )
+        st.success("Contrato cadastrado com sucesso!")
         st.balloons()
 
 # ==========================================
@@ -422,7 +428,7 @@ elif menu == "Acompanhamento":
 
   st.markdown(f"**Total exibido:** {len(df_filtrado)} contratos")
 
-  # Renomeando colunas para visualização limpa e amigável (sem underlines)
+  # Prepara tabela de exibição formatando as datas para DD/MM/AAAA
   df_exibicao = df_filtrado[[
       "numero_contrato",
       "razao_social",
@@ -433,6 +439,13 @@ elif menu == "Acompanhamento":
       "Dias Restantes",
       "Situação",
   ]].copy()
+
+  df_exibicao["data_termino"] = df_exibicao["data_termino"].apply(
+      formatar_data_br
+  )
+  df_exibicao["valor_estimado"] = df_exibicao["valor_estimado"].apply(
+      formatar_moeda
+  )
 
   df_exibicao.columns = [
       "Número do Contrato",
@@ -445,14 +458,12 @@ elif menu == "Acompanhamento":
       "Situação",
   ]
 
-  # Aplica formatação monetária na tabela exibida
-  df_exibicao["Valor Estimado"] = df_exibicao["Valor Estimado"].apply(
-      formatar_moeda
-  )
-
-  # Aplica estilo de cores condicional
+  # Aplica cores na caixa (fundo) da Situação e cor na letra do Risco
   st.dataframe(
-      df_exibicao.style.apply(colorir_tabela, axis=1), use_container_width=True
+      df_exibicao.style.applymap(
+          estilizar_celulas, subset=["Situação", "Risco Compliance"]
+      ),
+      use_container_width=True,
   )
 
   st.markdown("---")
