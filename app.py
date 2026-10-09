@@ -105,7 +105,6 @@ def carregar_dados():
       df.to_csv(CSV_PATH, index=False)
     else:
       df = pd.read_csv(CSV_PATH)
-      # Limpa e garante que as colunas essenciais existam
       if "numero_contrato" not in df.columns and "id_contrato" in df.columns:
         df = df.rename(columns={"id_contrato": "numero_contrato"})
     return df
@@ -126,7 +125,6 @@ def calcular_status_linha(row):
 
   data_term_str = str(row["data_termino"]).strip()
   try:
-    # Tenta ler formato ISO (YYYY-MM-DD) ou brasileiro (DD/MM/YYYY)
     if "-" in data_term_str:
       data_term = datetime.strptime(data_term_str[:10], "%Y-%m-%d").date()
     else:
@@ -190,8 +188,8 @@ def validar_cnpj(cnpj):
   return len(cnpj_limpo) == 14
 
 
-# Estilização de Cores (Caixa inteira para Situação e Texto para Risco)
-def estilizar_celulas(val):
+# Funções de estilização para a tabela
+def estilizar_situacao(val):
   if val == "Vigente":
     return "background-color: #d4edda; color: #155724; font-weight: bold;"
   elif val in ["Próximo do vencimento", "Vence hoje"]:
@@ -200,14 +198,16 @@ def estilizar_celulas(val):
     return "background-color: #f8d7da; color: #721c24; font-weight: bold;"
   elif val == "Encerrado":
     return "background-color: #e2e3e5; color: #383d41; font-weight: bold;"
+  return ""
 
+
+def estilizar_risco(val):
   if val == "Baixo":
     return "color: #28a745; font-weight: bold;"
   elif val == "Médio":
     return "color: #d39e00; font-weight: bold;"
   elif val == "Alto":
     return "color: #dc3545; font-weight: bold;"
-
   return ""
 
 
@@ -458,11 +458,11 @@ elif menu == "Acompanhamento":
       "Situação",
   ]
 
-  # Aplica cores na caixa (fundo) da Situação e cor na letra do Risco
+  # Aplica estilização correta por coluna (fundo na Situação e cor na letra no Risco)
   st.dataframe(
-      df_exibicao.style.applymap(
-          estilizar_celulas, subset=["Situação", "Risco Compliance"]
-      ),
+      df_exibicao.style.map(
+          estilizar_situacao, subset=["Situação"]
+      ).map(estilizar_risco, subset=["Risco Compliance"]),
       use_container_width=True,
   )
 
