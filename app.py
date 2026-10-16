@@ -527,4 +527,162 @@ elif menu == "Acompanhamento":
           ["Normal", "Encerrado"],
           index=0 if dados_contrato["situacao_manual"] == "Normal" else 1,
       )
-      novo_valor =
+      novo_valor = st.number_input(
+          "Valor Estimado (R$)", value=float(dados_contrato["valor_estimado"])
+      )
+      novo_responsavel = st.text_input(
+          "Responsável", value=str(dados_contrato["responsavel"])
+      )
+
+      col_b1, col_b2 = st.columns(2)
+      salvar_edicao = col_b1.form_submit_button("Atualizar Contrato")
+      excluir_contrato = col_b2.form_submit_button("Excluir Contrato")
+
+      if salvar_edicao:
+        df_atual = df_contratos.copy()
+        idx = df_atual[
+            df_atual["numero_contrato"] == contrato_selecionado
+        ].index[0]
+        df_atual.loc[idx, "situacao_manual"] = novo_status_manual
+        df_atual.loc[idx, "valor_estimado"] = novo_valor
+        df_atual.loc[idx, "responsavel"] = novo_responsavel
+
+        cols_salvar = [
+            c for c in df_atual.columns if c not in ["Dias Restantes", "Situação"]
+        ]
+        salvar_dados(df_atual[cols_salvar])
+        st.success("Contrato atualizado com sucesso! Recarregue a página.")
+
+      if excluir_contrato:
+        df_atual = df_contratos.copy()
+        df_atual = df_atual[
+            df_atual["numero_contrato"] != contrato_selecionado
+        ]
+        cols_salvar = [
+            c for c in df_atual.columns if c not in ["Dias Restantes", "Situação"]
+        ]
+        salvar_dados(df_atual[cols_salvar])
+        st.success("Contrato excluído com sucesso! Recarregue a página.")
+
+# ==========================================
+# 3. RELATÓRIOS E EXPORTAÇÃO
+# ==========================================
+elif menu == "Relatórios e Exportação":
+  st.title("📈 Relatórios e Exportação de Dados")
+  st.markdown("Visualize resumos consolidados e baixe a base completa em CSV.")
+
+  st.subheader("Resumo por Situação")
+  resumo_sit = df_contratos["Situação"].value_counts().reset_index()
+  resumo_sit.columns = ["Situação", "Quantidade"]
+  st.dataframe(resumo_sit, use_container_width=True)
+
+  st.subheader("Resumo por Área Demandante")
+  resumo_area = (
+      df_contratos.groupby("area_demandante")
+      .agg(
+          quantidade=("numero_contrato", "count"),
+          valor_total=("valor_estimado", "sum"),
+      )
+      .reset_index()
+  )
+  resumo_area["valor_total"] = resumo_area["valor_total"].apply(formatar_moeda)
+  resumo_area.columns = [
+      "Área Demandante",
+      "Quantidade de Contratos",
+      "Valor Total Acumulado",
+  ]
+  st.dataframe(resumo_area, use_container_width=True)
+
+  st.markdown("---")
+  st.subheader("📥 Baixar Base de Dados Completa")
+
+  cols_csv = [
+      c for c in df_contratos.columns if c not in ["Dias Restantes", "Situação"]
+  ]
+  csv_export = df_contratos[cols_csv].to_csv(index=False).encode("utf-8")
+  st.download_button(
+      label="Baixar contratos.csv",
+      data=csv_export,
+      file_name="contratos.csv",
+      mime="text/csv",
+  )
+
+# ==========================================
+# 4. DASHBOARD (ÚLTIMO ITEM)
+# ==========================================
+elif menu == "Dashboard":
+  st.title("📊 Dashboard de Gestão de Contratos")
+  st.markdown(
+      "Visão geral dos indicadores e métricas contratuais atualizadas em"
+      " tempo real."
+  )
+
+  total_contratos = len(df_contratos)
+  vigentes = len(df_contratos[df_contratos["Situação"] == "Vigente"])
+  proximos = len(
+      df_contratos[df_contratos["Situação"] == "Próximo do vencimento"]
+  )
+  vencidos = len(df_contratos[df_contratos["Situação"].isin(["Vencido"])])
+  valor_total = df_contratos["valor_estimado"].sum()
+
+  col1, col2, col3, col4, col5 = st.columns(5)
+  col1.metric("Total", total_contratos)
+  col2.metric("Vigentes", vigentes)
+  col3.metric("Próx. Vencimento", proximos)
+  col4.metric("Vencidos", vencidos, delta_color="inverse")
+  col5.metric("Valor Total", formatar_moeda(valor_total))
+
+  st.markdown("---")
+
+  c1, c2 = st.columns(2)
+
+  with c1:
+    st.subheader("Contratos por Área Demandante")
+    df_area = df_contratos["area_demandante"].value_counts().reset_index()
+    df_area.columns = ["Área", "Quantidade"]
+    fig_area = px.bar(
+        df_area,
+        x="Área",
+        y="Quantidade",
+        text="Quantidade",
+        color="Área",
+        color_discrete_sequence=px.colors.qualitative.Prism,
+    )
+    st.plotly_chart(fig_area, use_container_width=True)
+
+  with c2:
+    st.subheader("Distribuição por Risco de Compliance")
+    df_risco = df_contratos["risco_compliance"].value_counts().reset_index()
+    df_risco.columns = ["Risco", "Quantidade"]
+    fig_risco = px.pie(
+        df_risco,
+        names="Risco",
+        values="Quantidade",
+        hole=0.4,
+        color="Risco",
+        color_discrete_map={
+            "Baixo": "#28a745",
+            "Médio": "#ffc107",
+            "Alto": "#dc3545",
+        },
+    )
+    st.plotly_chart(fig_risco, use_container_width=True)
+
+  st.subheader("Quantidade de Contratos por Situação")
+  df_situacao = df_contratos["Situação"].value_counts().reset_index()
+  df_situacao.columns = ["Situação", "Quantidade"]
+  fig_sit = px.bar(
+      df_situacao,
+      x="Situação",
+      y="Quantidade",
+      text="Quantidade",
+      color="Situação",
+      color_discrete_map={
+          "Vigente": "#28a745",
+          "Próximo do vencimento": "#ffc107",
+          "Vence hoje": "#ff851b",
+          "Vencido": "#dc3545",
+          "Encerrado": "#6c757d",
+      },
+  )
+  st.plotly_chart(fig_sit, use_container_width=True)
