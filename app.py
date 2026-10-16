@@ -11,11 +11,10 @@ st.set_page_config(
     layout="wide",
 )
 
-# Estilização CSS global para garantir bordas visíveis em todas as tabelas (DataFrames)
+# Estilização CSS global para forçar bordas e linhas visíveis em todas as tabelas
 st.markdown(
     """
     <style>
-    /* Estilização robusta para tabelas do Streamlit com bordas visíveis */
     table {
         border-collapse: collapse !important;
         width: 100% !important;
@@ -25,16 +24,15 @@ st.markdown(
         background-color: #f1f3f5 !important;
         color: #212529 !important;
         font-weight: bold !important;
-        border: 1px solid #ced4da !important;
+        border: 1px solid #adb5bd !important;
         padding: 10px !important;
         text-align: center !important;
     }
     td {
-        border: 1px solid #dee2e6 !important;
+        border: 1px solid #ced4da !important;
         padding: 8px 10px !important;
         color: #212529 !important;
     }
-    /* Linhas zebradas suaves */
     tbody tr:nth-child(even) {
         background-color: #f8f9fa !important;
     }
@@ -49,11 +47,9 @@ st.markdown(
 # Caminho do CSV
 CSV_PATH = os.path.join("data", "contratos.csv")
 
+
 # --- FUNÇÕES DE DADOS E PERSISTÊNCIA ---
-
-
 def criar_base_ficticia():
-  """Gera uma base inicial com aproximadamente 25 contratos fictícios."""
   hoje = date.today()
   dados_iniciais = []
 
@@ -97,13 +93,13 @@ def criar_base_ficticia():
   for i in range(1, 26):
     dias_offset_inicio = -(i * 15)
     if i % 5 == 0:
-      termino = hoje - timedelta(days=i * 5)  # Vencido
+      termino = hoje - timedelta(days=i * 5)
     elif i % 4 == 0:
-      termino = hoje + timedelta(days=10)  # Próximo do vencimento
+      termino = hoje + timedelta(days=10)
     elif i == 3:
-      termino = hoje  # Vence hoje
+      termino = hoje
     else:
-      termino = hoje + timedelta(days=120 + (i * 5))  # Vigente
+      termino = hoje + timedelta(days=120 + (i * 5))
 
     num_contrato = f"EC {i:03d}/2027"
 
@@ -222,7 +218,7 @@ def validar_cnpj(cnpj):
   return len(cnpj_limpo) == 14
 
 
-# Funções de estilização visual para células específicas
+# Estilização de células específicas
 def estilizar_situacao(val):
   if val == "Vigente":
     return (
@@ -283,7 +279,6 @@ st.sidebar.info(
     " educacionais."
 )
 
-# Carrega os dados globais
 df_contratos = carregar_dados()
 
 if not df_contratos.empty:
@@ -503,7 +498,6 @@ elif menu == "Acompanhamento":
       "Situação",
   ]
 
-  # Exibição com bordas visíveis e estilização condicional aplicada
   st.dataframe(
       df_exibicao.style.map(
           estilizar_situacao, subset=["Situação"]
